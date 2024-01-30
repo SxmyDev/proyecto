@@ -1,15 +1,13 @@
 package main
 
 import (
-	"github.com/Sxmmy2030/proyecto/auth"
-	"github.com/Sxmmy2030/proyecto/websocket"
-	"net/http"
+    "log"
+    "net/http"
+    "github.com/Sxmmy2030/proyecto/routes"
 )
 
 func main() {
-	http.HandleFunc("/login", auth.LoginHandler)
-	http.HandleFunc("/register", auth.RegisterHandler)
-	http.HandleFunc("/ws", websocket.WsHandler)
+    router := routes.RoutesConfig()
 
-	http.ListenAndServe(":8080", nil)
+    log.Fatal(http.ListenAndServe(":8000", router))
 }

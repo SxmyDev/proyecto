@@ -1,52 +1,16 @@
 package auth
 
 import (
-    "encoding/json"
-    "fmt"
-    "github.com/Sxmmy2030/proyecto/database"
-    "github.com/dgrijalva/jwt-go"
-    "github.com/joho/godotenv"
-    "golang.org/x/crypto/bcrypt"
-    "io/ioutil"
-    "net/http"
-    "os"
-    "time"
+	"encoding/json"
+	"io/ioutil"
+	"net/http"
+
+	// "github.com/Sxmmy2030/proyecto/database"
+	"github.com/Sxmmy2030/proyecto/jwt"
+	"github.com/Sxmmy2030/proyecto/models"
+	"github.com/Sxmmy2030/proyecto/repositories"
+	"golang.org/x/crypto/bcrypt"
 )
-
-type User struct {
-    Username string `json:"username"`
-    Password string `json:"password"`
-}
-
-func generateJWT(username string) (string, error) {
-
-	err := godotenv.Load()
-	if err != nil {
-		return "", fmt.Errorf("Failed to load .env file: %v", err)
-	}
-
-	jwtKey := os.Getenv("JWT_SECRET")
-	if jwtKey == "" {
-		return "", fmt.Errorf("Failed to get JWT_SECRET from environment variables")
-	}
-
-	expirationTime := time.Now().Add(5 * time.Minute)
-	claims := &jwt.StandardClaims{
-		ExpiresAt: expirationTime.Unix(),
-		Issuer:    username,
-	}
-
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	tokenString, err := token.SignedString([]byte(jwtKey))
-	if err != nil {
-		return "", fmt.Errorf("Failed to generate JWT token: %v", err)
-	}
-	if err != nil {
-		return "", err
-	}
-
-	return tokenString, nil
-}
 
 func LoginHandler(w http.ResponseWriter, r *http.Request) {
     if r.Method != http.MethodPost {
@@ -60,26 +24,28 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    var user User
-    err = json.Unmarshal(body, &user)
+    var credentials models.Proveedor
+    err = json.Unmarshal(body, &credentials)
     if err != nil {
         http.Error(w, "Error parsing request body", http.StatusBadRequest)
         return
     }
 
-    passwordHash, err := database.GetUser(user.Username)
+    proveedor, err := repositories.GetProveedorByEmail(credentials.Email)
     if err != nil {
-        http.Error(w, "Error: Failed to get user from database", http.StatusInternalServerError)
+        http.Error(w, "Error: Failed to get provider from database", http.StatusInternalServerError)
         return
     }
 
-    err = bcrypt.CompareHashAndPassword([]byte(passwordHash), []byte(user.Password))
+    passwordHash := []byte(proveedor.Password)
+
+    err = bcrypt.CompareHashAndPassword(passwordHash, []byte(credentials.Password))
     if err != nil {
         http.Error(w, "Error: Invalid credentials", http.StatusUnauthorized)
         return
     }
 
-    tokenString, err := generateJWT(user.Username)
+    tokenString, err := jwt.GenerateJWT(proveedor.RazonSocial, proveedor.RUC, proveedor.IDProveedor)
     if err != nil {
         http.Error(w, "Error: Failed to generate token", http.StatusInternalServerError)
         return
@@ -99,6 +65,7 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
     w.Write(jsonResponse)
 }
 
+
 func RegisterHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
@@ -111,21 +78,21 @@ func RegisterHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var user User
-	err = json.Unmarshal(body, &user)
+	var proveedor models.Proveedor
+	err = json.Unmarshal(body, &proveedor)
 	if err != nil {
 		http.Error(w, "Error parsing request body", http.StatusBadRequest)
 		return
 	}
 
-	err = database.AddUser(user.Username, user.Password)
+	err = repositories.AddProveedor(proveedor)
     if err != nil {
         // Devuelve el error real
         http.Error(w, err.Error(), http.StatusInternalServerError)
         return
     }
 
-	tokenString, err := generateJWT(user.Username)
+	tokenString, err := jwt.GenerateJWT(proveedor.RazonSocial, proveedor.RUC, proveedor.IDProveedor)
 	if err != nil {
 		http.Error(w, "Error: Failed to generate token", http.StatusInternalServerError)
 		return
